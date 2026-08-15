@@ -72,6 +72,46 @@ export class MiraieClient {
     this.connected = false;
   }
 
+  async executeCommand(deviceId: string, command: DeviceCommand): Promise<any> {
+    // If we have a session from miraie-ac-js, delegate to its fluent devices
+    if ((this as any)._session) {
+      const devices = (this as any)._session.getDevices ? await (this as any)._session.getDevices() : (this.hubDevices || []);
+      const dev = devices.find((d: any) => String(d.data?.deviceId || d.id || d.deviceId) === String(deviceId));
+      if (dev) {
+        const cmd = command.type;
+        const p = command.payload || {};
+        try {
+          if (cmd === 'set_temperature' || cmd === 'temperature') {
+            return await dev.setTemperature(Number(p.temperature ?? p.temp));
+          }
+          if (cmd === 'turn_on' || cmd === 'power' && p.on) return await dev.turnOn();
+          if (cmd === 'turn_off' || cmd === 'power' && !p.on) return await dev.turnOff();
+          if (typeof dev[cmd] === 'function') return await dev[cmd](p);
+        } catch (e) {
+          return { success: false, error: e };
+        }
+      }
+    }
+
+    // Fallback: publish to broker control topic
+    const d = this.hubDevices.find(x => x.id === String(deviceId));
+    if (!d) return { success: false, message: 'device not found' };
+    const tarr = d.meta?.topic || d.meta?.topics || [];
+    const base = Array.isArray(tarr) && tarr.length > 0 ? tarr[0] : null;
+    if (!base) return { success: false, message: 'no control topic for device' };
+    const controlTopic = `${base}/control`;
+    const payload = { type: command.type, payload: command.payload };
+    try {
+      if (!this.broker || !this.broker.client) return { success: false, message: 'broker not connected' };
+      this.broker.client.publish(controlTopic, JSON.stringify(payload), { qos: 1 });
+      // optimistic update
+      d.updateFromPayload(controlTopic, payload);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err?.message || String(err) };
+    }
+  }
+
   // placeholder: discover devices via hub API / broker
   async discover(): Promise<void> {
     if (!this.connected) await this.connect();

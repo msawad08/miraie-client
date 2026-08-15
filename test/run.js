@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-const MiraieAcJs = (() => {
-  try { return require('miraie-ac-js'); } catch (e) { return null; }
-})();
-
 const [,, username, password, temp] = process.argv;
 
 if (!username || !password || !temp) {
@@ -11,8 +7,40 @@ if (!username || !password || !temp) {
 }
 
 async function run() {
+  // prefer local client if available
+  let MiraieClient = null;
+  try {
+    MiraieClient = require('..').default;
+  } catch (e) {
+    // ignore
+  }
+
+  if (MiraieClient) {
+    const client = new MiraieClient();
+    await client.init(username, password);
+    const devices = client.hubDevices || [];
+    if (!devices || devices.length === 0) {
+      console.error('No devices found for this account');
+      await client.close();
+      process.exit(3);
+    }
+    const d = devices[0];
+    console.log('Targeting device:', d.name || d.id);
+    try {
+      await client.executeCommand(d.id, { type: 'set_temperature', payload: { temperature: Number(temp) } });
+      console.log('Set temperature to', temp);
+    } catch (err) {
+      console.error('Command failed:', err);
+    }
+    await client.close();
+    return;
+  }
+
+  // fallback to upstream package
+  let MiraieAcJs = null;
+  try { MiraieAcJs = require('miraie-ac-js'); } catch (e) { MiraieAcJs = null; }
   if (!MiraieAcJs) {
-    console.error('miraie-ac-js is not installed. Install it with `npm i miraie-ac-js`');
+    console.error('Neither local client nor miraie-ac-js is installed. Install with `npm i miraie-ac-js` or build the package.');
     process.exit(2);
   }
 
