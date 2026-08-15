@@ -20,8 +20,42 @@ export class MirAIeDevice {
     this.meta = meta;
   }
 
+  updateFromPayload(topic: string, payload: any) {
+    // payload expected to be parsed JSON or string
+    const obj = typeof payload === 'string' ? (() => {
+      try { return JSON.parse(payload); } catch (e) { return { raw: payload }; }
+    })() : payload;
+
+    // simple heuristics to map fields
+    const state: any = this.state || {};
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      const lk = k.toLowerCase();
+      if (lk.includes('temp')) {
+        const n = Number(v);
+        if (!isNaN(n)) state.temperature = n;
+      } else if (lk.includes('power') || lk === 'on' || lk === 'pwr') {
+        state.power = !!v;
+      } else if (lk.includes('mode')) {
+        state.mode = String(v);
+      } else if (lk.includes('fan')) {
+        state.fan = String(v);
+      }
+    }
+
+    this.state = state;
+    // store last raw payload
+    this.meta = this.meta || {};
+    this.meta._lastStatus = obj;
+  }
+
   async refresh(): Promise<void> {
-    // TODO: implement fetching latest state from hub/broker
+    // return last cached state from broker messages or meta
+    if (this.meta && this.meta._lastStatus) {
+      this.updateFromPayload('', this.meta._lastStatus);
+      return;
+    }
+    return;
   }
 
   async execute(command: DeviceCommand): Promise<any> {

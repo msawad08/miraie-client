@@ -108,6 +108,36 @@ export class MiraieClient {
       // fallback to empty
       this.hubDevices = [];
     }
+    // If broker exists, subscribe to status topics for devices
+    if (this.broker) {
+      const topics: string[] = [];
+      for (const d of this.hubDevices) {
+        const tarr = d.meta?.topic || d.meta?.topics || [];
+        const base = Array.isArray(tarr) && tarr.length > 0 ? tarr[0] : null;
+        if (base) {
+          topics.push(`${base}/status`);
+          topics.push(`${base}/connectionStatus`);
+        }
+      }
+      if (topics.length > 0) {
+        try {
+          await this.broker.subscribe(topics);
+          this.broker.on('message', (topic: string, msg: string|null) => {
+            if (!msg) return;
+            for (const d of this.hubDevices) {
+              const tarr = d.meta?.topic || d.meta?.topics || [];
+              const base = Array.isArray(tarr) && tarr.length > 0 ? tarr[0] : null;
+              if (!base) continue;
+              if (topic.startsWith(base)) {
+                d.updateFromPayload(topic, msg);
+              }
+            }
+          });
+        } catch (e) {
+          // ignore subscription errors for now
+        }
+      }
+    }
   }
 
   private isEmail(input: string) {
