@@ -56,10 +56,33 @@ export class MirAIeBroker extends EventEmitter {
   async close(): Promise<void> {
     if (!this.client) return;
     return new Promise((resolve) => {
-      this.client?.end(true, {}, () => {
-        this.client = null;
+      let called = false;
+      const finish = () => {
+        if (called) return;
+        called = true;
+        try { this.client = null; } catch (e) {}
         resolve();
-      });
+      };
+
+      try {
+        this.client?.end(true, {}, () => {
+          finish();
+        });
+      } catch (e) {
+        // ignore
+      }
+
+      // safety timeout: force destroy underlying stream if end callback doesn't fire
+      setTimeout(() => {
+        try {
+          // @ts-ignore
+          if (this.client && this.client.stream && typeof this.client.stream.destroy === 'function') {
+            // @ts-ignore
+            this.client.stream.destroy();
+          }
+        } catch (e) {}
+        finish();
+      }, 2000);
     });
   }
 }

@@ -33,6 +33,8 @@ async function run() {
       console.error('Command failed:', err);
     }
     await client.close();
+    // ensure process exits (force after short delay if necessary)
+    setTimeout(() => process.exit(0), 500);
     return;
   }
 
@@ -51,6 +53,7 @@ async function run() {
   if (!devices || devices.length === 0) {
     console.error('No devices found for this account');
     await session.close();
+    setTimeout(() => process.exit(0), 500);
     process.exit(3);
   }
 
