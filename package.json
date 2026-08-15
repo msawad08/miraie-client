@@ -12,6 +12,11 @@
   },
   "author": "Mohammed Sawad <msawad08@gmail.com>",
   "license": "MIT",
+  "dependencies": {
+    "axios": "^1.4.0",
+    "mqtt": "^4.3.7",
+    "eventemitter3": "^5.0.0"
+  },
   "devDependencies": {
     "typescript": "^5.5.0"
   }
