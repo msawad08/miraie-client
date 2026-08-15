@@ -1,21 +1,30 @@
 #!/usr/bin/env node
-const [,, username, password, temp] = process.argv;
+const argv = process.argv.slice(2);
+const flags = new Set(argv.filter(a => a.startsWith('--')));
+const args = argv.filter(a => !a.startsWith('--'));
+const [username, password, temp] = args;
+
+const forceUpstream = flags.has('--upstream') || flags.has('-u');
+const forceLocal = flags.has('--local') || flags.has('-l');
 
 if (!username || !password || !temp) {
-  console.error('Usage: node test/run.js <username> <password> <temperature>');
+  console.error('Usage: node test/run.js [--upstream|-u] [--local|-l] <username> <password> <temperature>');
   process.exit(1);
 }
 
 async function run() {
-  // prefer local client if available
+  // prefer local client unless forced to use upstream
   let MiraieClient = null;
   try {
     MiraieClient = require('..').default;
   } catch (e) {
-    // ignore
+    MiraieClient = null;
   }
 
-  if (MiraieClient) {
+  if (MiraieClient && !forceUpstream) {
+    if (forceLocal === false && forceUpstream) {
+      // forced upstream, skip local
+    }
     const client = new MiraieClient();
     await client.init(username, password);
     const devices = client.hubDevices || [];
