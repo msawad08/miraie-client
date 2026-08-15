@@ -1,4 +1,7 @@
 import { Device, DeviceCommand, DeviceState } from './types';
+import { MirAIeDevice } from './device';
+import { MirAIeBroker } from './broker';
+import axios from 'axios';
 
 export interface MiraieClientOptions {
   username?: string;
@@ -6,44 +9,6 @@ export interface MiraieClientOptions {
   host?: string;
   token?: string;
 }
-
-export class MiraieClient {
-  private opts: MiraieClientOptions;
-  private connected = false;
-
-  constructor(opts: MiraieClientOptions = {}) {
-    this.opts = opts;
-  }
-
-  async connect(): Promise<void> {
-    // TODO: implement auth/session
-    this.connected = true;
-  }
-
-  async getDevices(): Promise<Device[]> {
-    if (!this.connected) await this.connect();
-    return [];
-  }
-
-  async getDeviceState(deviceId: string): Promise<DeviceState | null> {
-    if (!this.connected) await this.connect();
-    return null;
-  }
-
-  async executeCommand(deviceId: string, command: DeviceCommand): Promise<any> {
-    if (!this.connected) await this.connect();
-    return { success: false, message: 'Not implemented' };
-  }
-}
-
-export default MiraieClient;
-export * from './types';
-export { MirAIeBroker } from './broker';
-export { MirAIeDevice } from './device';
-
-import { MirAIeDevice } from './device';
-import { MirAIeBroker } from './broker';
-import axios from 'axios';
 
 let MiraieAcJs: any | null = null;
 try {
@@ -109,5 +74,9 @@ export class MiraieClient {
     this.hubDevices = [];
   }
 }
+
+export * from './types';
+export { MirAIeBroker } from './broker';
+export { MirAIeDevice } from './device';
 
 export default MiraieClient;
