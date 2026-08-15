@@ -24,6 +24,10 @@ export class MiraieClient {
   public hubDevices: MirAIeDevice[] = [];
   public broker: MirAIeBroker | null = null;
   private connected = false;
+  private accessToken: string | null = null;
+  private refreshToken: string | null = null;
+  private tokenExpiresAt: number | null = null;
+  private userId: string | null = null;
 
   constructor(opts: MiraieClientOptions = {}) {
     this.opts = opts;
@@ -54,7 +58,13 @@ export class MiraieClient {
       return;
     }
 
-    await this.connect();
+    // Fallback: perform HTTP auth + discovery
+    await this._authenticate(phone, password);
+    await this.discover();
+    // ensure broker connected
+    this.broker = this.broker || new MirAIeBroker({ mqttUrl: 'mqtts://mqtt.miraie.in:8883' });
+    await this.broker.connect();
+    this.connected = true;
   }
 
   async close(): Promise<void> {
@@ -69,9 +79,68 @@ export class MiraieClient {
       this.hubDevices = await (this as any)._session.getDevices();
       return;
     }
+    // Fallback: call homes endpoint and populate devices
+    if (!this.accessToken) throw new Error('not authenticated');
 
-    // TODO: fallback implementation using raw HTTP endpoints
-    this.hubDevices = [];
+    try {
+      const homesUrl = 'https://app.miraie.in/simplifi/v1/homeManagement/homes';
+      const resp = await axios.get(homesUrl, { headers: { Authorization: `Bearer ${this.accessToken}` } });
+      const data = resp.data;
+      // data may be { homes: [...] } or an array; search for devices in spaces
+      const devices: MirAIeDevice[] = [];
+      const homes = Array.isArray(data) ? data : (data.homes || data.data || []);
+      for (const home of homes) {
+        const spaces = home.spaces || [];
+        for (const space of spaces) {
+          const devs = space.devices || [];
+          for (const d of devs) {
+            const id = d.deviceId || d.id || d.device_id;
+            const name = d.deviceName || d.name || d.device_name || 'miraie-device';
+            const model = d.model || d.deviceModel;
+            const md = new MirAIeDevice(String(id), String(name), model);
+            md.setMeta(d);
+            devices.push(md);
+          }
+        }
+      }
+      this.hubDevices = devices;
+    } catch (err: any) {
+      // fallback to empty
+      this.hubDevices = [];
+    }
+  }
+
+  private isEmail(input: string) {
+    return /@/.test(input);
+  }
+
+  private async _authenticate(username: string, password: string): Promise<void> {
+    const url = 'https://auth.miraie.in/simplifi/v1/userManagement/login';
+    const clientId = 'PBcMcfG19njNCL8AOgvRzIC8AjQa';
+    const scope = 'an_14214235325';
+    const body: any = { clientId, password, scope };
+    if (this.isEmail(username)) body.email = username; else body.mobile = username;
+
+    const resp = await axios.post(url, body, { headers: { 'Content-Type': 'application/json' } });
+    const d = resp.data || {};
+    // try common shapes
+    const payload = d.data || d || {};
+    this.accessToken = payload.accessToken || payload.access_token || null;
+    this.refreshToken = payload.refreshToken || payload.refresh_token || null;
+    this.userId = payload.userId || payload.user_id || null;
+    const expiresIn = payload.expiresIn || payload.expires_in || null;
+    if (expiresIn) this.tokenExpiresAt = Date.now() + Number(expiresIn) * 1000;
+  }
+
+  async get_token(): Promise<string | null> {
+    if (!this.accessToken) return null;
+    if (this.tokenExpiresAt && Date.now() > this.tokenExpiresAt - 30000) {
+      // re-auth using stored creds
+      if (this.opts.username && this.opts.password) {
+        await this._authenticate(this.opts.username, this.opts.password);
+      }
+    }
+    return this.accessToken;
   }
 }
 

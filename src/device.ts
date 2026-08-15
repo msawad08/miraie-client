@@ -5,6 +5,8 @@ export class MirAIeDevice {
   name: string;
   model?: string;
   state: DeviceState | null = null;
+  // raw metadata from hub discovery
+  meta?: any;
   // optional underlying fluent device from miraie-ac-js
   fluent?: any;
 
@@ -12,6 +14,10 @@ export class MirAIeDevice {
     this.id = id;
     this.name = name;
     this.model = model;
+  }
+
+  setMeta(meta: any) {
+    this.meta = meta;
   }
 
   async refresh(): Promise<void> {
